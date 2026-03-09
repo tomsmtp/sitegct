@@ -1,0 +1,837 @@
+import "./inicio.css"
+import LogisticaPage from "./logistica/logistica.jsx"
+import { useEffect, useMemo, useState, useRef } from "react";
+import Carregamento from "./carregamento/carregamento.jsx"
+import Controladoria from "./controladoria/controladoria.jsx";
+import logoInicio from '../assets/logo_inicio.png';
+
+
+export default function Inicio({ onExit, currentUser }) {
+
+    const MAX_INPUT_LENGTH = 100;
+
+    const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
+    const APONTAMENTO_TABLE = import.meta.env.VITE_APONTAMENTO_TABLE || 'QUALIDADE.GESTAO_CARGAS_TRANSPORTE';
+
+    const fazendaRef = useRef();
+    const zonaRef = useRef();
+    const estoqueInicialRef = useRef();
+    const estoqueDiaRef = useRef();
+
+    const [selected, setSelected] = useState("");
+    const [validatedUser, setValidatedUser] = useState(currentUser);
+
+    // Validate user data with server on mount (always get latest from DB)
+    useEffect(() => {
+        if (currentUser?.EMAIL || currentUser?.email) {
+            const email = currentUser.EMAIL || currentUser.email;
+            fetch(`${API_BASE_URL}/user/validate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.ok && data.user) {
+                    // Update localStorage with fresh data
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    setValidatedUser(data.user);
+                }
+            })
+            .catch(err => console.log('User validation check:', err));
+        }
+    }, [API_BASE_URL]);
+
+    const nomeUsuario = validatedUser?.NOME || validatedUser?.nome || currentUser?.NOME || currentUser?.nome || 'USUÁRIO';
+    const tipoUsuario = validatedUser?.TIPO || validatedUser?.tipo || currentUser?.TIPO || currentUser?.tipo || 'NÃO INFORMADO';
+    const tipoHeader = String(tipoUsuario || '').trim().toUpperCase();
+    const tipoAcesso = String(tipoUsuario || '').trim().toUpperCase();
+
+    const modulosPermitidos = useMemo(() => {
+        if (tipoAcesso === 'ADMIN') {
+            return ['APONTAMENTO', 'LOGISTICA', 'CARREGAMENTO', 'CONTROLADORIA'];
+        }
+        if (tipoAcesso === 'SUPERVISOR') {
+            return ['PROCESSO_UNICO', 'APONTAMENTO', 'LOGISTICA', 'CONTROLADORIA'];
+        }
+        if (tipoAcesso === 'GERENTE') {
+            return ['CONTROLADORIA'];
+        }
+        if (tipoAcesso === 'LOGISTICA') {
+            return ['LOGISTICA'];
+        }
+        if (tipoAcesso === 'CARREGAMENTO') {
+            return ['CARREGAMENTO'];
+        }
+        if (tipoAcesso === 'CONTROLADORIA') {
+            return ['CONTROLADORIA'];
+        }
+        return [];
+    }, [tipoAcesso]);
+
+    useEffect(() => {
+        if (modulosPermitidos.length === 0) {
+            setSelected('');
+            return;
+        }
+
+        if (!modulosPermitidos.includes(selected)) {
+            setSelected(modulosPermitidos[0]);
+        }
+    }, [modulosPermitidos, selected]);
+
+    const podeAcessar = (modulo) => modulosPermitidos.includes(modulo);
+    
+    // helper para formatar valores em kg com separador de milhar
+    const formatKg = (value) => {
+        // remove quaisquer caracteres não-dígitos
+        const digits = value.replace(/\D/g, "");
+        if (!digits) return "";
+        // adiciona vírgula como separador de milhar (por exemplo 3,000)
+        return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    };
+
+    const parseKg = (value = "") => Number(String(value).replace(/\D/g, "")) || 0;
+
+    const formatTotalKg = (num = 0) => {
+        return Number(num).toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    };
+
+    const calcularTotalKg = (estoqueInicial, estoqueDia) =>
+        formatTotalKg(String(parseKg(estoqueInicial) + parseKg(estoqueDia)));
+
+    const UnidadeFormat = (value) => {
+        const digitos = value.replace(/\D/g, "").slice(0, 3);
+        return digitos;
+    }
+
+    const ZonaFormat = (value) => {
+        const digitos = value.replace(/\D/g, "");
+        return digitos;
+    }
+
+    const zona = useRef();
+    const estoqueInicial = useRef();
+    const estoqueDia = useRef();
+    const prevColheitaRef = useRef();
+
+    // Estado para armazenar os registros
+    const [registros, setRegistros] = useState([]);
+    const [enviando, setEnviando] = useState(false);
+    const [tipoOperacao, setTipoOperacao] = useState('CITRUS'); // 'CITRUS' ou 'GRÃOS'
+    
+    // Estado para os campos do formulário
+    const [formData, setFormData] = useState({
+        unidade: '',
+        fazenda: '',
+        zona: '',
+        estoqueInicial: '',
+        estoqueDia: '',
+        estoqueTotal: '',
+        prevColheita: '',
+        operacao: 'CITRUS'
+    });
+
+    // Estado para controlar a edição
+    const [editando, setEditando] = useState(null);
+    const [formEdicao, setFormEdicao] = useState({
+        unidade: '',
+        fazenda: '',
+        zona: '',
+        estoqueInicial: '',
+        estoqueDia: '',
+        estoqueTotal: '',
+        prevColheita: '',
+        operacao: 'CITRUS'
+    });
+
+    // Função para adicionar um novo registro
+    const handleRegistrar = () => {
+        if (!formData.unidade || !formData.fazenda || !formData.zona) {
+            alert('Preencha UNIDADE, DESTINO e ZONA!');
+            return;
+        }
+
+        if (tipoOperacao === 'CITRUS') {
+            if (!formData.estoqueInicial || !formData.estoqueDia) {
+                alert('Para CITRUS, preencha ESTOQUE INICIAL e ESTOQUE DO DIA!');
+                return;
+            }
+        } else if (tipoOperacao === 'GRÃOS') {
+            if (!formData.prevColheita) {
+                alert('Para GRÃOS, preencha PREVISÃO DE COLHEITA!');
+                return;
+            }
+        }
+
+        const idDisponibilidade = `DIS-${new Date().getFullYear()}-${formData.unidade}-${Math.floor(10000 + Math.random() * 90000)}`;
+
+        const novoRegistro = {
+            id: idDisponibilidade,
+            unidade: formData.unidade,
+            fazenda: formData.fazenda,
+            zona: formData.zona,
+            estoqueInicial: tipoOperacao === 'GRÃOS' ? '0' : formData.estoqueInicial,
+            estoqueDia: tipoOperacao === 'GRÃOS' ? '0' : formData.estoqueDia,
+            estoqueTotal: tipoOperacao === 'GRÃOS' ? '0' : calcularTotalKg(formData.estoqueInicial, formData.estoqueDia),
+            prevColheita: tipoOperacao === 'GRÃOS' ? formData.prevColheita : '0',
+            operacao: tipoOperacao,
+            criadoEm: new Date().toLocaleString('pt-BR'),
+            status: 'DIS'
+        };
+
+        setRegistros([...registros, novoRegistro]);
+        
+        // Limpa o formulário
+        setFormData({
+            unidade: '',
+            fazenda: '',
+            zona: '',
+            estoqueInicial: '',
+            estoqueDia: '',
+            estoqueTotal: '',
+            prevColheita: '',
+            operacao: tipoOperacao
+        });
+
+        alert('Registro adicionado! Adicione mais ou clique em ENVIAR TODOS.');
+    };
+
+    // Função para abrir modal de edição
+    const handleAbrirEdicao = (registro) => {
+        setEditando(registro.id);
+        setFormEdicao({
+            unidade: registro.unidade,
+            fazenda: registro.fazenda,
+            zona: registro.zona,
+            estoqueInicial: registro.estoqueInicial,
+            estoqueDia: registro.estoqueDia,
+            estoqueTotal: registro.estoqueTotal
+
+
+
+        });
+    };
+
+    // Função para salvar edição
+    const handleSalvarEdicao = () => {
+        if (!formEdicao.unidade || !formEdicao.fazenda || !formEdicao.zona || !formEdicao.estoqueInicial || !formEdicao.estoqueDia) {
+            alert('Preencha todos os campos!');
+            return;
+        }
+
+        setRegistros(registros.map(reg => 
+            reg.id === editando 
+                ? {
+                    ...reg,
+                    unidade: formData.unidade,
+                    fazenda: formEdicao.fazenda,
+                    zona: formEdicao.zona,
+                    estoqueInicial: formEdicao.estoqueInicial,
+                    estoqueDia: formEdicao.estoqueDia,
+                    estoqueTotal: formEdicao.estoqueTotal
+                  }
+                : reg
+        ));
+
+        setEditando(null);
+        alert('Registro atualizado com sucesso!');
+    };
+
+    // Função para cancelar edição
+    const handleCancelarEdicao = () => {
+        setEditando(null);
+        setFormEdicao({
+            unidade: '',
+            fazenda: '',
+            zona: '',
+            estoqueInicial: '',
+            estoqueDia: '',
+            estoqueTotal: ''
+        });
+    };
+
+    // Função para remover um registro
+    const handleRemover = (id) => {
+        const ok = confirm('Deseja realmente remover este registro?');
+        if (!ok) return;
+        setRegistros(registros.filter(reg => reg.id !== id));
+    };
+
+    // Função para enviar todos os registros
+    const handleEnviarTodos = async () => {
+        if (registros.length === 0) {
+            alert('Não há registros para enviar!');
+            return;
+        }
+
+        if (enviando) return;
+
+        const ok = confirm(`Deseja enviar ${registros.length} registro(s)?`);
+        if (!ok) return;
+
+        try {
+            setEnviando(true);
+            const response = await fetch(`${API_BASE_URL}/apontamento/enviar`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-type': tipoHeader
+                },
+                body: JSON.stringify({
+                    registros,
+                    ...(APONTAMENTO_TABLE ? { tableSpec: APONTAMENTO_TABLE } : {})
+                })
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                const detalhes = [
+                    data.error,
+                    data.detail,
+                    data.table ? `Tabela: ${data.table}` : null,
+                    Array.isArray(data.missingColumns) && data.missingColumns.length > 0
+                        ? `Colunas ausentes: ${data.missingColumns.join(', ')}`
+                        : null,
+                    Array.isArray(data.requiredMissing) && data.requiredMissing.length > 0
+                        ? `Obrigatórias sem valor: ${data.requiredMissing.map(c => c.name).join(', ')}`
+                        : null,
+                    Array.isArray(data.paramIssues) && data.paramIssues.length > 0
+                        ? `Parâmetros inválidos: ${data.paramIssues.map(p => `${p.column} (${p.issue})`).join(', ')}`
+                        : null
+                ].filter(Boolean).join(' | ');
+
+                throw new Error(detalhes || 'Falha ao enviar registros para o banco.');
+            }
+
+            alert(`Registros enviados com sucesso! (${data.inserted || registros.length})`);
+            setRegistros([]);
+            window.dispatchEvent(new Event('gct:data-updated'));
+        } catch (error) {
+            alert(`Erro ao enviar para o banco: ${error.message}`);
+        } finally {
+            setEnviando(false);
+        }
+    };
+    
+    /////////////////////////////
+    return (
+        <>
+        <aside className="sideBar">
+            <div className="headSidebar">
+                <img 
+                    src={logoInicio}
+                    className="logo"
+                />
+                
+                <button
+                    className="btnExit"
+                    onClick={() => {
+                        const ok = confirm('Tem certeza que deseja sair?');
+                        if (!ok) return;
+                        // Limpar cache antes de sair
+                        localStorage.clear();
+                        sessionStorage.clear();
+                        alert('Saindo e voltando para a tela de login');
+                        if (onExit) onExit();
+                    }}
+                >
+                    Sair
+                </button>
+            </div>
+            
+            <div className="btnFunctions">
+                {podeAcessar('APONTAMENTO') && (
+                <button onClick={() => setSelected('APONTAMENTO')}>
+                    APONTAMENTO
+                </button>
+                )}
+
+                {podeAcessar('LOGISTICA') && (
+                <button onClick={() => setSelected('LOGISTICA')}>
+                    LOGÍSTICA
+                </button>
+                )}
+
+                {podeAcessar('CARREGAMENTO') && (
+                <button onClick={() => setSelected('CARREGAMENTO')}>
+                    CARREGAMENTO
+                </button>
+                )}
+
+                {podeAcessar('CONTROLADORIA') && (
+                <button onClick={() => setSelected('CONTROLADORIA')}>
+                    CONTROLADORIA
+                </button>
+                )}
+
+                {podeAcessar('PROCESSO_UNICO') && (
+                <button onClick={() => {
+                    const ok = confirm('Tem certeza que deseja iniciar o fluxo completo (Apontamento + Logística + Carregamento)?');
+                    if (!ok) return;
+                    setSelected('PROCESSO_UNICO');
+                }}>
+                    PROCESSO ÚNICO (APONTAMENTO + LOGÍSTICA + CARREGAMENTO)
+                </button>
+                )}
+            </div>
+
+            <div className="sidebarUserFooter">
+                <div className="sidebarUserName">{nomeUsuario}</div>
+                <div className="sidebarUserType">TIPO: {tipoUsuario}</div>
+            </div>
+        </aside>
+
+        <div className="stepPanel">
+            {modulosPermitidos.length === 0 && <p>USUÁRIO SEM MÓDULOS LIBERADOS. VERIFIQUE O TIPO DE ACESSO.</p>}
+            {modulosPermitidos.length > 0 && selected === '' && <p>ESCOLHA UMA OPÇÃO DISPONIVEL</p>}
+
+            {selected === 'PROCESSO_UNICO' && podeAcessar('PROCESSO_UNICO') && (
+                <div className="step-processo-unico">
+                    <h2>PROCESSO ÚNICO - SUPERVISOR</h2>
+
+                    <div className="step-content">
+                        <h2>NOVA DISPONIBILIDADE</h2>
+
+                        {/* Botões para selecionar tipo de operação */}
+                        <div className="tipo-operacao-botoes">
+                            <button 
+                                className={`tipo-btn ${tipoOperacao === 'CITRUS' ? 'ativo' : ''}`}
+                                onClick={() => {
+                                    setTipoOperacao('CITRUS');
+                                    setFormData({...formData, operacao: 'CITRUS'});
+                                }}
+                            >
+                                    APONTAR CITRUS
+                            </button>
+                            <button 
+                                className={`tipo-btn ${tipoOperacao === 'GRÃOS' ? 'ativo' : ''}`}
+                                onClick={() => {
+                                    setTipoOperacao('GRÃOS');
+                                    setFormData({...formData, operacao: 'GRÃOS'});
+                                }}
+                            >
+                                    APONTAR GRÃOS
+                            </button>
+                        </div>
+
+                        <label>
+                            UNIDADE:
+                            <input type="text"
+                                maxLength={MAX_INPUT_LENGTH}
+                                placeholder="Ex: 112, 115 ou 127"
+                                value={formData.unidade}
+                                onKeyDown={ e => {if (e.key === "Enter") {fazendaRef.current.focus();}}}
+                                onChange={(e) => setFormData({...formData, unidade: UnidadeFormat(e.target.value)})}
+                            />
+                        </label>
+
+                        <label>
+                            DESTINO:
+                            <input 
+                                type="text" 
+                                maxLength={MAX_INPUT_LENGTH}
+                                pattern="[A-Za-zÀ-ÿ ]*"
+                                title="Somente letras"
+                                placeholder="Ex: Tiese **SOMENTE LETRAS**"
+                                value={formData.fazenda}
+                                onChange={(e) => setFormData({...formData, fazenda: e.target.value.toUpperCase()})}
+                                ref = {fazendaRef}  
+                                onKeyDown={e => { if (e.key === "Enter") {zonaRef.current.focus();}}}
+                                onKeyPress={e => {
+                                    const char = String.fromCharCode(e.which);
+                                    if (!/[A-Za-zÀ-ÿ ]/.test(char)) {
+                                        e.preventDefault();
+                                    }
+                                }}
+                            />
+                        </label>
+
+                        <label>
+                            ZONA:
+                            <input 
+                                type="text" 
+                                placeholder="Ex: 1234   "
+                                ref={zonaRef}
+                                value={formData.zona}
+                                onKeyDown={e => {if (e.key === "Enter") {tipoOperacao === 'CITRUS' ? estoqueInicialRef.current.focus() : prevColheitaRef.current.focus();}}}
+                                onChange={(e) => setFormData({...formData, zona: ZonaFormat(e.target.value)})}
+                            />
+                        </label>
+
+                        {tipoOperacao === 'CITRUS' && (
+                        <>
+                            <label>
+                                ESTOQUE INICIAL (KG):
+                                <input 
+                                    type="text" 
+                                    maxLength={MAX_INPUT_LENGTH}
+                                    placeholder="Ex: 3,000"
+                                    value={formData.estoqueInicial}
+                                    ref={estoqueInicialRef}
+                                    onKeyDown={e => {if (e.key === "Enter") {estoqueDiaRef.current.focus();}}}
+                                    onChange={(e) => setFormData({...formData, estoqueInicial: formatKg(e.target.value)})}
+                                />
+                            </label>
+
+                            <label>
+                                ESTOQUE DO DIA (KG):
+                                <input 
+                                    type="text" 
+                                    maxLength={MAX_INPUT_LENGTH}
+                                    placeholder="Ex: 3,000"
+                                    ref={estoqueDiaRef}
+                                    value={formData.estoqueDia}
+                                    onChange={(e) => setFormData({...formData, estoqueDia: formatKg(e.target.value)})}
+                                />
+                            </label>
+
+                            <label>
+                                SALDO TOTAL (KG):
+                                <input 
+                                    type="text"
+                                    maxLength={MAX_INPUT_LENGTH}
+                                    value={calcularTotalKg(formData.estoqueInicial, formData.estoqueDia)}
+                                    readOnly
+                                />
+                            </label>
+                        </>
+                        )}
+
+                        {tipoOperacao === 'GRÃOS' && (
+                        <label>
+                            PREVISÃO DE COLHEITA:
+                            <input 
+                                type="text" 
+                                maxLength={MAX_INPUT_LENGTH}
+                                placeholder="Ex: 50 sacas"
+                                ref={prevColheitaRef}
+                                value={formData.prevColheita}
+                                onChange={(e) => setFormData({...formData, prevColheita: e.target.value.toUpperCase()})}
+                            />
+                        </label>
+                        )}
+
+                        <button className="submit-btn" onClick={handleRegistrar}>
+                            REGISTRAR
+                        </button>
+
+                        {registros.length > 0 && (
+                            <div className="registros-lista">
+                                <h3>Registros Pendentes ({registros.length})</h3>
+                                
+                                {registros.map((registro) => (
+                                    <div key={registro.id} className="registro-card">
+                                        <div 
+                                            className="registro-info"
+                                            onClick={() => handleAbrirEdicao(registro)}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            <span><strong>{registro.id}</strong></span>
+                                            <span>UNIDADE: {registro.unidade}</span>
+                                            <span>DESTINO: {registro.fazenda}</span>
+                                            <span>ZONA: {registro.zona}</span>
+                                            <span>OPERAÇÃO: {registro.operacao}</span>
+                                            {registro.operacao === 'CITRUS' && (
+                                                <>
+                                                    <span>ESTOQUE INICIAL: {registro.estoqueInicial} KG</span>
+                                                    <span>ESTOQUE DO DIA: {registro.estoqueDia} KG</span>
+                                                    <span>SALDO TOTAL: {registro.estoqueTotal} KG</span>
+                                                </>
+                                            )}
+                                            {registro.operacao === 'GRÃOS' && (
+                                                <span>PREVISÃO COLHEITA: {registro.prevColheita}</span>
+                                            )}
+                                            <span>CRIADO EM: {registro.criadoEm}</span>
+                                            <span className="status-badge-dis">STATUS: DIS</span>
+                                        </div>
+                                        <button 
+                                            className="btn-remover"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemover(registro.id);
+                                            }}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+
+                                <button className="enviar-todos-btn" onClick={handleEnviarTodos} disabled={enviando}>
+                                    {enviando ? 'ENVIANDO...' : `ENVIAR TODOS (${registros.length})`}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="step-logistica">
+                        <LogisticaPage currentUser={validatedUser} />
+                    </div>
+
+                    <div className="step-carregamento">
+                        <Carregamento currentUser={validatedUser} />
+                    </div>
+                </div>
+            )}
+            
+            {selected === 'APONTAMENTO' && podeAcessar('APONTAMENTO') && (
+                <div className="step-content">
+                    <h2>NOVA DISPONIBILIDADE</h2>
+
+                    {/* Botões para selecionar tipo de operação */}
+                    <div className="tipo-operacao-botoes">
+                        <button 
+                            className={`tipo-btn ${tipoOperacao === 'CITRUS' ? 'ativo' : ''}`}
+                            onClick={() => {
+                                setTipoOperacao('CITRUS');
+                                setFormData({...formData, operacao: 'CITRUS'});
+                            }}
+                        >
+                                APONTAR CITRUS
+                        </button>
+                        <button 
+                            className={`tipo-btn ${tipoOperacao === 'GRÃOS' ? 'ativo' : ''}`}
+                            onClick={() => {
+                                setTipoOperacao('GRÃOS');
+                                setFormData({...formData, operacao: 'GRÃOS'});
+                            }}
+                        >
+                                APONTAR GRÃOS
+                        </button>
+                    </div>
+
+                    <label>
+                        UNIDADE:
+                        <input type="text"
+                            maxLength={MAX_INPUT_LENGTH}
+                            placeholder="Ex: 112, 115 ou 127"
+                            value={formData.unidade}
+                            onKeyDown={ e => {if (e.key === "Enter") {fazendaRef.current.focus();}}}
+                            onChange={(e) => setFormData({...formData, unidade: UnidadeFormat(e.target.value)})}
+                        />
+                    </label>
+
+                    <label>
+                        DESTINO:
+                        <input 
+                            type="text" 
+                            maxLength={MAX_INPUT_LENGTH}
+                            pattern="[A-Za-zÀ-ÿ ]*"
+                            title="Somente letras"
+                            placeholder="Ex: Tiese **SOMENTE LETRAS**"
+                            value={formData.fazenda}
+                            onChange={(e) => setFormData({...formData, fazenda: e.target.value.toUpperCase()})}
+                            ref = {fazendaRef}  
+                            onKeyDown={e => { if (e.key === "Enter") {zonaRef.current.focus();}}}
+                            onKeyPress={e => {
+                                const char = String.fromCharCode(e.which);
+                                if (!/[A-Za-zÀ-ÿ ]/.test(char)) {
+                                    e.preventDefault();
+                                }
+                            }}
+                        />
+                    </label>
+
+                    <label>
+                        ZONA:
+                        <input 
+                            type="text" 
+                            placeholder="Ex: 123"
+                            ref={zonaRef}
+                            value={formData.zona}
+                            onKeyDown={e => {if (e.key === "Enter") {tipoOperacao === 'CITRUS' ? estoqueInicialRef.current?.focus() : prevColheitaRef.current?.focus();}}}
+                            onChange={(e) => setFormData({...formData, zona: ZonaFormat(e.target.value)})}
+                        />
+                    </label>
+
+                    {/* Campos para CITRUS */}
+                    {tipoOperacao === 'CITRUS' && (
+                        <>
+                            <label>
+                                ESTOQUE INICIAL (KG):
+                                <input 
+                                    type="text" 
+                                    maxLength={MAX_INPUT_LENGTH}
+                                    placeholder="Ex: 3,000"
+                                    value={formData.estoqueInicial}
+                                    ref={estoqueInicialRef}
+                                    onKeyDown={e => {if (e.key === "Enter") {estoqueDiaRef.current.focus();}}}
+                                    onChange={(e) => setFormData({...formData, estoqueInicial: formatKg(e.target.value)})}
+                                />
+                            </label>
+
+                            <label>
+                                COLHEITA DO DIA (KG):
+                                <input 
+                                    type="text" 
+                                    maxLength={MAX_INPUT_LENGTH}
+                                    placeholder="Ex: 3,000"
+                                    ref={estoqueDiaRef}
+                                    value={formData.estoqueDia}
+                                    onChange={(e) => setFormData({...formData, estoqueDia: formatKg(e.target.value)})}
+                                />
+                            </label>
+
+                            <label>
+                                SALDO TOTAL (KG):
+                                <input 
+                                    type="text"
+                                    maxLength={MAX_INPUT_LENGTH}
+                                    value={calcularTotalKg(formData.estoqueInicial, formData.estoqueDia)}
+                                    readOnly
+                                >
+                                </input>
+                            </label>
+                        </>
+                    )}
+
+                    {/* Campo para GRÃOS */}
+                    {tipoOperacao === 'GRÃOS' && (
+                        <label>
+                            PREVISÃO DE COLHEITA (KG):
+                            <input 
+                                type="text" 
+                                maxLength={MAX_INPUT_LENGTH}
+                                placeholder="Ex: 5,000"
+                                value={formData.prevColheita}
+                                ref={prevColheitaRef}
+                                onChange={(e) => setFormData({...formData, prevColheita: formatKg(e.target.value)})}
+                            />
+                        </label>
+                    )}
+
+                    <button className="submit-btn" onClick={handleRegistrar}>
+                        REGISTRAR
+                    </button>
+
+                    {/* Lista de registros */}
+                    {registros.length > 0 && (
+                        <div className="registros-lista">
+                            <h3>Registros Pendentes ({registros.length})</h3>
+                            
+                            {registros.map((registro) => (
+                                <div key={registro.id} className="registro-card">
+                                    <div 
+                                        className="registro-info"
+                                        onClick={() => handleAbrirEdicao(registro)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        <span><strong>{registro.id}</strong></span>
+                                        <span>UNIDADE: {registro.unidade}</span>
+                                        <span>DESTINO: {registro.fazenda}</span>
+                                        <span>ZONA: {registro.zona}</span>
+                                        <span>SALDO TOTAL: {registro.estoqueTotal} KG</span>
+                                        <span>CRIADO EM: {registro.criadoEm}</span>
+                                        <span className="status-badge-dis">STATUS: DIS</span>
+                                    </div>
+                                    <button 
+                                        className="btn-remover"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemover(registro.id);
+                                        }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ))}
+
+                            <button className="enviar-todos-btn" onClick={handleEnviarTodos} disabled={enviando}>
+                                {enviando ? 'ENVIANDO...' : `ENVIAR TODOS (${registros.length})`}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )},
+
+            {selected === 'LOGISTICA' && podeAcessar('LOGISTICA') && (
+                <div className="step-logistica">
+                    <LogisticaPage currentUser={validatedUser} />
+                </div>
+            )},
+
+            {selected === 'CARREGAMENTO' && podeAcessar('CARREGAMENTO') && (
+                <div className="step-carregamento">
+                    <Carregamento currentUser={validatedUser} />
+                </div>
+            )},
+
+            {selected === 'CONTROLADORIA' && podeAcessar('CONTROLADORIA') && (
+                <div className="step-control">
+                    <Controladoria currentUser={validatedUser} />
+                </div>
+            )};
+            
+        </div>
+        {/* Modal de Edição */}
+        {editando && (
+            <div className="modal-overlay" onClick={handleCancelarEdicao}>
+                <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <h2>Editar Registro</h2>
+                    <p className="modal-id">ID: {editando}</p>
+
+                    <label>
+                        DESTINO:
+                        <input 
+                            type="text" 
+                            maxLength={MAX_INPUT_LENGTH}
+                            pattern="[A-Za-zÀ-ÿ ]*"
+                            title="Somente letras"
+                            value={formEdicao.fazenda}
+                            onChange={(e) => setFormEdicao({...formEdicao, fazenda: e.target.value})}
+                            onKeyPress={e => {
+                                const char = String.fromCharCode(e.which);
+                                if (!/[A-Za-zÀ-ÿ ]/.test(char)) {
+                                    e.preventDefault();
+                                }
+                            }}
+                        />
+                    </label>
+
+                    <label>
+                        ZONA:
+                        <input 
+                            type="text" 
+                            value={formEdicao.zona}
+                            onChange={(e) => setFormEdicao({...formEdicao, zona: ZonaFormat(e.target.value)})}
+                        />
+                    </label>
+
+                    <label>
+                        ESTOQUE INICIAL (KG):
+                        <input 
+                            type="text" 
+                            maxLength={MAX_INPUT_LENGTH}
+                            value={formEdicao.estoqueInicial}
+                            onChange={(e) => setFormEdicao({...formEdicao, estoqueInicial: formatKg(e.target.value)})}
+                        />
+                    </label>
+
+                    <label>
+                        ESTOQUE DO DIA (KG):
+                        <input 
+                            type="text" 
+                            maxLength={MAX_INPUT_LENGTH}
+                            value={formEdicao.estoqueDia}
+                            onChange={(e) => setFormEdicao({...formEdicao, estoqueDia: formatKg(e.target.value)})}
+                        />
+                    </label>
+
+                    <div className="modal-buttons">
+                        <button className="btn-cancelar" onClick={handleCancelarEdicao}>
+                            CANCELAR
+                        </button>
+                        <button className="btn-salvar" onClick={handleSalvarEdicao}>
+                            SALVAR
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
+    )
+}
