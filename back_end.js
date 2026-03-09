@@ -1,7 +1,7 @@
 // this file now runs a simple express API for login/testing
 import express from 'express';
 import cors from 'cors';
-import odbc from 'odbc';
+import odbc from 'odbc/lib/odbc.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -1392,6 +1392,45 @@ app.post('/apontamento/enviar', requireModuleAccess(['SUPERVISOR']), async (req,
 const port = Number(process.env.PORT || 3001);
 const host = process.env.HOST || '0.0.0.0';
 
-app.listen(port, host, () => {
-  console.log(`test API server listening on http://${host}:${port}`);
+const server = app.listen(port, host, () => {
+  console.log(`✓ test API server listening on http://${host}:${port}`);
+  console.log(`✓ SERVER INICIADO COM SUCESSO - Pressione CTRL+C para encerrar`);
+  console.log(`✓ Tempo de início: ${new Date().toLocaleString('pt-BR')}`);
 });
+
+// Mantém o servidor aberto
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+
+// Tratamento de erros não capturados
+process.on('uncaughtException', (error) => {
+  console.error('[ERRO NÃO CAPTURADO]:', error.message);
+  console.error(error.stack);
+  // Servidor continua rodando
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[PROMISE REJEITADA]:', reason);
+  // Servidor continua rodando
+});
+
+// Graceful shutdown
+const handleShutdown = (signal) => {
+  console.log(`\n[${signal}] Encerrando servidor...`);
+  server.close(() => {
+    console.log('✓ Servidor fechado com sucesso');
+    process.exit(0);
+  });
+  
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    console.error('⚠ Forçando encerramento...');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
+// Keep process alive
+process.stdin.resume();
