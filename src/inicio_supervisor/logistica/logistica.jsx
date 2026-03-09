@@ -15,13 +15,14 @@ const estadoInicialForm = {
     empresa: "",
     placa: "",
     capacidade: "",
+    fazenda: "",
     destino: "",
     combustivel: "",
     tipoFrete: "",
     frete: ""
 };
 
-export default function LogisticaPage({ currentUser }) {
+export default function LogisticaPage({ currentUser, fazendaApontamento }) {
     const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
     const tipoHeader = String(currentUser?.TIPO || currentUser?.tipo || "").trim().toUpperCase();
 
@@ -157,6 +158,7 @@ export default function LogisticaPage({ currentUser }) {
         setState((prev) => ({
             ...prev,
             disponibilidade: idDisponibilidade,
+            fazenda: destino,
             destino
         }));
     };
@@ -204,6 +206,7 @@ export default function LogisticaPage({ currentUser }) {
             empresa: registro.empresa,
             placa: registro.placa,
             capacidade: registro.capacidade,
+            fazenda: registro.fazenda || "",
             destino: registro.destino,
             combustivel: registro.combustivel,
             tipoFrete: registro.tipoFrete || "",
@@ -238,6 +241,7 @@ export default function LogisticaPage({ currentUser }) {
                     empresa: formEdicao.empresa,
                     placa: formEdicao.placa,
                     capacidade: formEdicao.capacidade,
+                    fazenda: formEdicao.fazenda,
                     destino: reg.destino,
                     combustivel: formEdicao.combustivel,
                     tipoFrete: formEdicao.tipoFrete,
@@ -429,14 +433,25 @@ export default function LogisticaPage({ currentUser }) {
             </label>
 
             <label>
+                FAZENDA:
+                <input 
+                type="text"
+                maxLength={MAX_INPUT_LENGTH}
+                value={formData.fazenda || fazendaApontamento || ""}
+                readOnly
+                placeholder="AUTOMÁTICO"
+                />
+            </label>
+
+            <label>
                 DESTINO:
                 <input 
                 type="text"
                 maxLength={MAX_INPUT_LENGTH}
                 ref={destinoRef}
                 value={formData.destino}
-                placeholder="AUTOMATICO"
-                readOnly
+                placeholder="INSIRA O DESTINO DA CARGA"
+                onChange={(e) => setFormData({ ...formData, destino: e.target.value })}
                 onKeyDown={e => {if (e.key === "Enter") {combustivelRef.current.focus();}}}
                 />
             </label>
@@ -623,12 +638,22 @@ export default function LogisticaPage({ currentUser }) {
                     </label>
 
                     <label>
+                        FAZENDA:
+                        <input
+                            type="text"
+                            maxLength={MAX_INPUT_LENGTH}
+                            value={formEdicao.fazenda || ""}
+                            readOnly
+                        />
+                    </label>
+
+                    <label>
                         DESTINO:
                         <input
                             type="text"
                             maxLength={MAX_INPUT_LENGTH}
                             value={formEdicao.destino}
-                            readOnly
+                            onChange={e => setFormEdicao({...formEdicao, destino: e.target.value})}
                         />
                     </label>
 

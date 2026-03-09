@@ -151,7 +151,7 @@ export default function Inicio({ onExit, currentUser }) {
     // Função para adicionar um novo registro
     const handleRegistrar = () => {
         if (!formData.unidade || !formData.fazenda || !formData.zona) {
-            alert('Preencha UNIDADE, DESTINO e ZONA!');
+            alert('Preencha UNIDADE, FAZENDA e ZONA!');
             return;
         }
 
@@ -431,7 +431,7 @@ export default function Inicio({ onExit, currentUser }) {
                         </label>
 
                         <label>
-                            DESTINO:
+                            FAZENDA:
                             <input 
                                 type="text" 
                                 maxLength={MAX_INPUT_LENGTH}
@@ -533,7 +533,7 @@ export default function Inicio({ onExit, currentUser }) {
                                         >
                                             <span><strong>{registro.id}</strong></span>
                                             <span>UNIDADE: {registro.unidade}</span>
-                                            <span>DESTINO: {registro.fazenda}</span>
+                                            <span>FAZENDA: {registro.fazenda}</span>
                                             <span>ZONA: {registro.zona}</span>
                                             <span>OPERAÇÃO: {registro.operacao}</span>
                                             {registro.operacao === 'CITRUS' && (
@@ -569,7 +569,7 @@ export default function Inicio({ onExit, currentUser }) {
                     </div>
 
                     <div className="step-logistica">
-                        <LogisticaPage currentUser={validatedUser} />
+                        <LogisticaPage currentUser={validatedUser} fazendaApontamento={formData.fazenda} />
                     </div>
 
                     <div className="step-carregamento">
@@ -616,7 +616,7 @@ export default function Inicio({ onExit, currentUser }) {
                     </label>
 
                     <label>
-                        DESTINO:
+                        FAZENDA:
                         <input 
                             type="text" 
                             maxLength={MAX_INPUT_LENGTH}
@@ -722,7 +722,7 @@ export default function Inicio({ onExit, currentUser }) {
                                     >
                                         <span><strong>{registro.id}</strong></span>
                                         <span>UNIDADE: {registro.unidade}</span>
-                                        <span>DESTINO: {registro.fazenda}</span>
+                                        <span>FAZENDA: {registro.fazenda}</span>
                                         <span>ZONA: {registro.zona}</span>
                                         <span>SALDO TOTAL: {registro.estoqueTotal} KG</span>
                                         <span>CRIADO EM: {registro.criadoEm}</span>
@@ -750,7 +750,7 @@ export default function Inicio({ onExit, currentUser }) {
 
             {selected === 'LOGISTICA' && podeAcessar('LOGISTICA') && (
                 <div className="step-logistica">
-                    <LogisticaPage currentUser={validatedUser} />
+                    <LogisticaPage currentUser={validatedUser} fazendaApontamento={formData.fazenda} />
                 </div>
             )},
 
@@ -775,7 +775,7 @@ export default function Inicio({ onExit, currentUser }) {
                     <p className="modal-id">ID: {editando}</p>
 
                     <label>
-                        DESTINO:
+                        FAZENDA:
                         <input 
                             type="text" 
                             maxLength={MAX_INPUT_LENGTH}
